@@ -1,4 +1,4 @@
-let apiKey = "AIzaSyBMzjJz8TDbWlZ_DRlyCN9580utzgLBly8";
+let apiKey = "xxx";
 let datasetUrl =
   "https://data.cityofnewyork.us/resource/8znf-7b2c.json?$where=section='MN041'&$limit=20";
 

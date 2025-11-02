@@ -24,6 +24,7 @@ function setup() {
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
       push();
+      //position of each group of square
       translate(margin + cellW * (i + 0.5), margin + cellH * (j + 0.5));
       drawSquareSet(min(cellW, cellH) * 0.9);
       pop();

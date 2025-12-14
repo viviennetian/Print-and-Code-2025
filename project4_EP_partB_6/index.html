@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CARE MART: Unseen Costs</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+      /* --- 1. 全局设置 --- */
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Helvetica Neue", Arial, sans-serif;
+        background-color: #ffffff;
+        height: 100vh;
+        overflow: hidden;
+        position: relative;
+      }
+
+      /* --- 2. 海报层 (底层) --- */
+      #poster-layer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        /* 统一背景：灰色 + 网点 */
+        background-color: #e0e0e0;
+        background-image: radial-gradient(#ccc 1px, transparent 1px);
+        background-size: 20px 20px;
+        z-index: 1;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+      }
+
+      /* 网格模式下的样式调整 */
+      #poster-layer.grid-mode {
+        /* 背景保持灰色，保持网点 */
+        overflow-y: auto; /* 允许滚动 */
+        align-items: flex-start; /* 内容从上开始 */
+        padding-top: 100px;
+      }
+
+      .center-title {
+        font-family: "Gotham", sans-serif;
+        font-weight: 900;
+        font-size: 80px;
+        color: #111;
+        text-transform: uppercase;
+        z-index: 1000;
+        text-align: center;
+        pointer-events: none;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        transition: all 0.5s ease;
+      }
+
+      /* 网格模式下标题变小并移到顶部 */
+      #poster-layer.grid-mode .center-title {
+        top: 50px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 40px;
+        position: absolute;
+      }
+
+      /* --- Receipt Container --- */
+      /* 默认：Chaos 模式 (absolute) */
+      #receipt-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      /* 网格模式：Grid 容器 */
+      /* 网格模式：Grid 容器 */
+      #poster-layer.grid-mode #receipt-container {
+        position: relative;
+        width: 100%;
+        height: auto;
+        display: grid;
+        /* 调整 1: 增加 gap 间距 */
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(260px, 1fr)
+        ); /* 稍微调大列宽容器以容纳间距 */
+        gap: 50px; /* 从 30px 改为 50px，增加呼吸感 */
+        padding: 80px 80px 150px 80px;
+        pointer-events: auto;
+        box-sizing: border-box;
+      }
+
+      /* --- 小票样式 --- */
+      .scattered-receipt {
+        position: absolute; /* 默认绝对定位 */
+        width: 200px;
+        background: #fff;
+        padding: 15px;
+        font-family: "Courier New", monospace;
+        font-size: 10px;
+        color: #000;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        z-index: 10;
+        transition: transform 0.3s, top 0.5s, left 0.5s;
+        pointer-events: auto;
+        clip-path: polygon(
+          0% 0%,
+          100% 0%,
+          100% 100%,
+          95% 99%,
+          90% 100%,
+          85% 99%,
+          80% 100%,
+          75% 99%,
+          70% 100%,
+          65% 99%,
+          60% 100%,
+          55% 99%,
+          50% 100%,
+          45% 99%,
+          40% 100%,
+          35% 99%,
+          30% 100%,
+          25% 99%,
+          20% 100%,
+          15% 99%,
+          10% 100%,
+          5% 98%,
+          0% 100%
+        );
+      }
+      .scattered-receipt:hover {
+        z-index: 999;
+        transform: scale(1.1) !important;
+      }
+
+      /* --- 核心：网格模式下强制覆盖小票样式 --- */
+      #poster-layer.grid-mode .scattered-receipt {
+        position: relative !important;
+        top: auto !important;
+        left: auto !important;
+        transform: none !important;
+        /* 调整 2: 不要用 100% 宽度，而是固定宽度防止变形 */
+        width: 240px !important;
+        /* 让小票在各自的格子里居中 */
+        margin: 0 auto !important;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      /* --- 按钮组 --- */
+      .poster-controls {
+        position: absolute;
+        bottom: 30px;
+        right: 30px;
+        z-index: 2000;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 12px;
+        /* 确保按钮在滚动时也固定在右下角 */
+        position: fixed;
+      }
+
+      .btn-common {
+        padding: 14px 28px;
+        font-family: "Courier New", monospace;
+        font-weight: bold;
+        cursor: pointer;
+        text-transform: uppercase;
+        border: 2px solid #000;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        font-size: 14px;
+        min-width: 240px;
+        text-align: center;
+        transition: all 0.2s;
+      }
+
+      .btn-primary {
+        background: #000;
+        color: #fff;
+      }
+      .btn-primary:hover {
+        background: #333;
+        transform: translateY(-2px);
+      }
+
+      .btn-secondary {
+        background: #fff;
+        color: #000;
+      }
+      .btn-secondary:hover {
+        background: #000;
+        color: #fff;
+        transform: translateY(-2px);
+      }
+
+      /* --- 3. 购物层 (顶层) --- */
+      #shop-layer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #ffffff;
+        z-index: 5000;
+        display: flex;
+        transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+      }
+      body.show-poster #shop-layer {
+        transform: translateY(-100%);
+      }
+
+      /* --- Market & Wallet (保持不变) --- */
+      .market-area {
+        flex: 1;
+        padding: 40px;
+        overflow-y: auto;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 60px 0px;
+        align-content: start;
+        background: #f4f4f4;
+      }
+      .product-card {
+        border: none;
+        background: transparent;
+        padding: 0;
+        cursor: pointer;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+      }
+      .card-layer-product {
+        z-index: 3;
+        width: 100%;
+        height: 160px;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        margin-bottom: -5px;
+        transition: transform 0.3s;
+      }
+      .card-layer-product img {
+        width: auto;
+        max-width: 95%;
+        height: auto;
+        max-height: 100%;
+        object-fit: contain;
+      }
+      .card-layer-shelf {
+        z-index: 5;
+        width: 100%;
+        height: 10px;
+        background: transparent;
+        border-top: 12px solid #000;
+        border-bottom: 12px solid #000;
+      }
+      .card-layer-tag {
+        z-index: 8;
+        width: 100px;
+        height: auto;
+        margin-top: -28px;
+        transition: transform 0.3s;
+        transform-origin: top center;
+      }
+      .card-layer-tag img {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+      .product-card:hover .card-layer-product {
+        transform: translateY(-12px);
+      }
+      .product-card:hover .card-layer-tag {
+        transform: translateY(2px) rotate(2deg);
+      }
+
+      .fab-add {
+        position: absolute;
+        bottom: 40px;
+        left: 15%;
+        transform: translateX(-50%);
+        background: #ffffff;
+        color: #000000;
+        border: 1px solid #000;
+        padding: 12px 25px;
+        font-family: "Courier New", Courier, monospace;
+        font-weight: bold;
+        cursor: pointer;
+        box-shadow: 5px 5px 5cap rgba(0, 0, 0, 0.1);
+        z-index: 100;
+      }
+      .fab-add:hover {
+        background: #000;
+        color: #fff;
+      }
+
+      .wallet-area {
+        width: 340px;
+        background: #f0f0f0;
+        border: 0.5px solid #000;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        font-family: "Courier New", Courier, monospace;
+        color: #000;
+        margin: 20px;
+        height: calc(100% - 40px);
+        clip-path: polygon(
+          0% 0%,
+          100% 0%,
+          100% 100%,
+          95% 99%,
+          90% 100%,
+          85% 99%,
+          80% 100%,
+          75% 99%,
+          70% 100%,
+          65% 99%,
+          60% 100%,
+          55% 99%,
+          50% 100%,
+          45% 99%,
+          40% 100%,
+          35% 99%,
+          30% 100%,
+          25% 99%,
+          20% 100%,
+          15% 99%,
+          10% 100%,
+          5% 98%,
+          0% 100%
+        );
+      }
+      .wallet-header {
+        padding: 20px;
+        border-bottom: 1.5px dashed #000;
+        text-align: center;
+      }
+      .balance-amount {
+        font-size: 36px;
+        font-weight: bold;
+        margin-top: 5px;
+        color: #000;
+      }
+      .transaction-list {
+        flex: 1;
+        padding: 10px 20px;
+        overflow-y: auto;
+        scrollbar-width: none;
+      }
+      .transaction-list::-webkit-scrollbar {
+        display: none;
+      }
+      .tx-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 8px;
+        padding-bottom: 8px;
+        border-bottom: 1px dotted #000;
+        font-size: 12px;
+        animation: slideIn 0.3s ease;
+      }
+      .tx-info {
+        flex: 1;
+      }
+      .tx-name {
+        font-weight: bold;
+      }
+      .tx-meta {
+        font-size: 10px;
+        display: block;
+        margin-top: 2px;
+      }
+      .tx-price {
+        font-weight: bold;
+        margin: 0 10px;
+        color: #000;
+      }
+      .btn-delete {
+        color: #000;
+        cursor: pointer;
+        font-size: 14px;
+        padding: 0 5px;
+        font-weight: bold;
+      }
+      .btn-delete:hover {
+        color: #ff3333;
+      }
+      .wallet-footer {
+        padding: 20px;
+        border-top: 1.5px dashed #000;
+        text-align: center;
+      }
+      .btn-checkout {
+        width: 100%;
+        padding: 12px;
+        background: #fff;
+        color: #000;
+        border: 1px solid #000;
+        font-weight: bold;
+        cursor: pointer;
+        font-family: "Courier New", monospace;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        transition: all 0.2s;
+        box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.1);
+      }
+      .btn-checkout:hover {
+        background: #000;
+        color: #fff;
+      }
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="poster-layer">
+      <div class="center-title">UNSEEN<br />COSTS</div>
+
+      <div id="receipt-container"></div>
+
+      <div class="poster-controls">
+        <button
+          class="btn-common btn-secondary"
+          onclick="toggleView()"
+          id="btn-toggle-view"
+        >
+          Switch to Grid View
+        </button>
+
+        <button class="btn-common btn-secondary" onclick="exportHighResPDF()">
+          Export Poster (PDF)
+        </button>
+
+        <button class="btn-common btn-primary" onclick="continueShopping()">
+          + Continue Life
+        </button>
+      </div>
+    </div>
+
+    <div id="shop-layer">
+      <div class="market-area" id="shelf">
+        <button class="fab-add" onclick="addRandomProduct()">
+          + Show Me More Items In the Market
+        </button>
+      </div>
+
+      <div class="wallet-area">
+        <div class="wallet-header">
+          <div style="font-size: 12px; font-weight: bold">CARE MART</div>
+          <div style="font-size: 10px; margin-bottom: 10px">
+            Store #0821 - Live Balance
+          </div>
+          <div class="balance-amount" id="balance">50.00</div>
+          <div style="font-size: 10px">AU (Affective Units)</div>
+        </div>
+        <div class="transaction-list" id="cart-list">
+          <div
+            id="empty-msg"
+            style="
+              text-align: center;
+              color: #000;
+              margin-top: 50px;
+              font-size: 12px;
+              font-weight: bold;
+            "
+          >
+            [ RECEIPT EMPTY ]<br />...WAITING FOR INPUT...
+          </div>
+        </div>
+        <div class="wallet-footer">
+          <button class="btn-checkout" onclick="checkoutAndGenerate()">
+            PRINT & POST
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // === 数据配置 ===
+      const inventory = [
+        // ---------- PAGE 1 ROW 1 ----------
+        {
+          imageSrc: "images/item_highheels.png",
+          tagSrc: "images/tag_highheels.png",
+          name: "High Heels",
+          price: -25.0,
+          type: "debit",
+          stickerText: "POSTURE DAMAGE ALERT",
+        },
+        {
+          imageSrc: "images/item_plushbunnytoy.png",
+          tagSrc: "images/tag_plushbunnytoy.png",
+          name: "Plush Bunny Toy",
+          price: 18.0,
+          type: "credit",
+          stickerText: "EMOTIONAL SUPPORT TOKEN",
+        },
+        {
+          imageSrc: "images/item_breakfastsandwich.png",
+          tagSrc: "images/tag_breakfastsandwich.png",
+          name: "Breakfast Sandwich",
+          price: -4.8,
+          type: "debit",
+          stickerText: "MORNING RUSH DEDUCTION",
+        },
+        {
+          imageSrc: "images/item_instantnoodles.png",
+          tagSrc: "images/tag_instantnoodles.png",
+          name: "Instant Noodles",
+          price: -3.4,
+          type: "debit",
+          stickerText: "LOW VALUE INPUT",
+        },
+        {
+          imageSrc: "images/item_alcoholminibottle.png",
+          tagSrc: "images/tag_alcoholminibottle.png",
+          name: "Alcohol Mini Bottle",
+          price: -7.0,
+          type: "debit",
+          stickerText: "TEMPORARY ESCAPE FEE",
+        },
+        {
+          imageSrc: "images/item_soothingfacialmist.png",
+          tagSrc: "images/tag_soothingfacialmist.png",
+          name: "Soothing Facial Mist",
+          price: 8.5,
+          type: "credit",
+          stickerText: "REFRESHMENT PULSE",
+        },
+        // ---------- PAGE 1 ROW 2 ----------
+        {
+          imageSrc: "images/item_spicychipsbag.png",
+          tagSrc: "images/tag_spicychipsbag.png",
+          name: "Spicy Chips Bag",
+          price: -3.9,
+          type: "debit",
+          stickerText: "DIGESTIVE DISTURBANCE",
+        },
+        {
+          imageSrc: "images/item_smartphonepro.png",
+          tagSrc: "images/tag_smartphonepro.png",
+          name: "Smartphone Pro",
+          price: -240.0,
+          type: "debit",
+          stickerText: "HIGH DRAIN DEVICE",
+        },
+        {
+          imageSrc: "images/item_heatpatch.png",
+          tagSrc: "images/tag_heatpatch.png",
+          name: "Heat Patch",
+          price: 5.8,
+          type: "credit",
+          stickerText: "TENSION RELEASE MODULE",
+        },
+        {
+          imageSrc: "images/item_herbalteabox.png",
+          tagSrc: "images/tag_herbalteabox.png",
+          name: "Herbal Tea Box",
+          price: 6.0,
+          type: "credit",
+          stickerText: "CALMING INPUT",
+        },
+        {
+          imageSrc: "images/item_heavytextbook.png",
+          tagSrc: "images/tag_heavytextbook.png",
+          name: "Heavy Textbook",
+          price: -15.0,
+          type: "debit",
+          stickerText: "MENTAL LOAD WARNING",
+        },
+        // ---------- PAGE 1 ROW 3 ----------
+        {
+          imageSrc: "images/item_laptopcharger.png",
+          tagSrc: "images/tag_laptopcharger.png",
+          name: "Laptop Charger",
+          price: -28.0,
+          type: "debit",
+          stickerText: "ENERGY EXTRACTION FEE",
+        },
+        {
+          imageSrc: "images/item_portablepowerbank.png",
+          tagSrc: "images/tag_portablepowerbank.png",
+          name: "Portable Power Bank",
+          price: -18.0,
+          type: "debit",
+          stickerText: "OVERTIME SURCHARGE",
+        },
+        {
+          imageSrc: "images/item_otcsleepaid.png",
+          tagSrc: "images/tag_otcsleepaid.png",
+          name: "OTC Sleep Aid",
+          price: -13.0,
+          type: "debit",
+          stickerText: "SYNTHETIC REST TOKEN",
+        },
+        {
+          imageSrc: "images/item_softblanket.png",
+          tagSrc: "images/tag_softblanket.png",
+          name: "Soft Blanket",
+          price: 22.0,
+          type: "credit",
+          stickerText: "RESTORATION UNIT",
+        },
+        {
+          imageSrc: "images/item_mechanicalkeyboard.png",
+          tagSrc: "images/tag_mechanicalkeyboard.png",
+          name: "Mechanical Keyboard",
+          price: -32.0,
+          type: "debit",
+          stickerText: "WORKLOAD AMPLIFIER",
+        },
+        {
+          imageSrc: "images/item_lavenderpillowspray.png",
+          tagSrc: "images/tag_lavenderpillowspray.png",
+          name: "Lavender Pillow Spray",
+          price: 9.1,
+          type: "credit",
+          stickerText: "SLEEP ENHANCEMENT FIELD",
+        },
+        // ---------- PAGE 2 ROW 1 ----------
+        {
+          imageSrc: "images/item_painrelieftablets.png",
+          tagSrc: "images/tag_painrelieftablets.png",
+          name: "Pain Relief Tablets",
+          price: -14.5,
+          type: "debit",
+          stickerText: "TEMPORARY FUNCTION RESTORE",
+        },
+        {
+          imageSrc: "images/item_energydrink.png",
+          tagSrc: "images/tag_energydrink.png",
+          name: "Energy Drink",
+          price: -5.2,
+          type: "debit",
+          stickerText: "SHORT-TERM BOOST PENALTY",
+        },
+        {
+          imageSrc: "images/item_espressoshot.png",
+          tagSrc: "images/tag_espressoshot.png",
+          name: "Espresso Shot",
+          price: -4.6,
+          type: "debit",
+          stickerText: "ADRENALINE TAX",
+        },
+        {
+          imageSrc: "images/item_coldbrewbottle.png",
+          tagSrc: "images/tag_coldbrewbottle.png",
+          name: "Cold Brew Bottle",
+          price: -5.4,
+          type: "debit",
+          stickerText: "STIMULATION FEE",
+        },
+        {
+          imageSrc: "images/item_workgloves.png",
+          tagSrc: "images/tag_workgloves.png",
+          name: "Work Gloves",
+          price: -7.8,
+          type: "debit",
+          stickerText: "LABOR INTENSITY TAG",
+        },
+        {
+          imageSrc: "images/item_earbuds.png",
+          tagSrc: "images/tag_earbuds.png",
+          name: "Earbuds",
+          price: -65.0,
+          type: "debit",
+          stickerText: "ISOLATED OVERLOAD",
+        },
+        {
+          imageSrc: "images/item_friedchicken.png",
+          tagSrc: "images/tag_friedchicken.png",
+          name: "Fried Chicken",
+          price: -11.8,
+          type: "debit",
+          stickerText: "HEAVY PROCESSING COST",
+        },
+        // ---------- PAGE 2 ROW 2 ----------
+        {
+          imageSrc: "images/item_freshbreadloaf.png",
+          tagSrc: "images/tag_freshbreadloaf.png",
+          name: "Fresh Bread Loaf",
+          price: 4.9,
+          type: "credit",
+          stickerText: "WARMTH INPUT",
+        },
+        {
+          imageSrc: "images/item_commuterbackpack.png",
+          tagSrc: "images/tag_commuterbackpack.png",
+          name: "Commuter Backpack",
+          price: -12.0,
+          type: "debit",
+          stickerText: "DAILY BURDEN TAG",
+        },
+        {
+          imageSrc: "images/item_warmsocks.png",
+          tagSrc: "images/tag_warmsocks.png",
+          name: "Warm Socks",
+          price: 7.2,
+          type: "credit",
+          stickerText: "THERMAL COMFORT BOOST",
+        },
+        {
+          imageSrc: "images/item_vitamingummies.png",
+          tagSrc: "images/tag_vitamingummies.png",
+          name: "Vitamin Gummies",
+          price: 7.4,
+          type: "credit",
+          stickerText: "BODY MAINTENANCE CREDIT",
+        },
+        {
+          imageSrc: "images/item_yogamat.png",
+          tagSrc: "images/tag_yogamat.png",
+          name: "Yoga Mat",
+          price: 28.0,
+          type: "credit",
+          stickerText: "REBALANCING MODULE",
+        },
+        {
+          imageSrc: "images/item_sweetpastrybox.png",
+          tagSrc: "images/tag_sweetpastrybox.png",
+          name: "Sweet Pastry Box",
+          price: -6.2,
+          type: "debit",
+          stickerText: "PLEASURE TAX",
+        },
+        // ---------- PAGE 2 ROW 3 ----------
+        {
+          imageSrc: "images/item_cozyslippers.png",
+          tagSrc: "images/tag_cozyslippers.png",
+          name: "Cozy Slippers",
+          price: 16.0,
+          type: "credit",
+          stickerText: "FOOT COMFORT PRIORITY",
+        },
+        {
+          imageSrc: "images/item_bathsaltjar.png",
+          tagSrc: "images/tag_bathsaltjar.png",
+          name: "Bath Salt Jar",
+          price: 11.0,
+          type: "credit",
+          stickerText: "MUSCLE RECOVERY PROGRAM",
+        },
+        {
+          imageSrc: "images/item_handcreamtube.png",
+          tagSrc: "images/tag_handcreamtube.png",
+          name: "Hand Cream Tube",
+          price: 6.3,
+          type: "credit",
+          stickerText: "SOFTNESS MODULE",
+        },
+        {
+          imageSrc: "images/item_anniversarycandle.png",
+          tagSrc: "images/tag_anniversarycandle.png",
+          name: "Anniversary Candle",
+          price: 9.5,
+          type: "credit",
+          stickerText: "MOOD REALIGNMENT",
+        },
+        {
+          imageSrc: "images/item_freshflowersbouquet.png",
+          tagSrc: "images/tag_freshflowersbouquet.png",
+          name: "Fresh Flowers Bouquet",
+          price: 12.0,
+          type: "credit",
+          stickerText: "AESTHETIC RECOVERY",
+        },
+        {
+          imageSrc: "images/item_essentialoilsrollon.png",
+          tagSrc: "images/tag_essentialoilsrollon.png",
+          name: "Essential Oils Roll-On",
+          price: 9.2,
+          type: "credit",
+          stickerText: "AROMA CALIBRATION",
+        },
+        {
+          imageSrc: "images/item_mineralwaterbottle.png",
+          tagSrc: "images/tag_mineralwaterbottle.png",
+          name: "Mineral Water Bottle",
+          price: 1.8,
+          type: "credit",
+          stickerText: "BASIC SUSTAIN FUNCTION",
+        },
+      ];
+
+      let currentBalance = 50.0;
+      let currentCartItems = [];
+      const shelfEl = document.getElementById("shelf");
+      const cartEl = document.getElementById("cart-list");
+      const balanceEl = document.getElementById("balance");
+      const receiptContainer = document.getElementById("receipt-container");
+      const posterLayer = document.getElementById("poster-layer");
+
+      function renderCard(product) {
+        const card = document.createElement("div");
+        card.className = "product-card";
+        const safeTagSrc =
+          product.tagSrc || "https://placehold.co/150x80/fff/000?text=TAG";
+        card.innerHTML = `
+        <div class="card-layer-product">
+            <img src="${product.imageSrc}" alt="${product.name}" onerror="this.src='https://placehold.co/200x200/eee/999?text=Item'">
+        </div>
+        <div class="card-layer-shelf"></div>
+        <div class="card-layer-tag">
+            <img src="${safeTagSrc}" alt="Price Tag">
+        </div>
+        `;
+        card.onclick = () => addToCart(product);
+        shelfEl.appendChild(card);
+      }
+
+      function addRandomProduct() {
+        const randomItem =
+          inventory[Math.floor(Math.random() * inventory.length)];
+        renderCard(randomItem);
+      }
+
+      function addToCart(product) {
+        if (document.getElementById("empty-msg"))
+          document.getElementById("empty-msg").remove();
+        const item = document.createElement("div");
+        item.className = "tx-item";
+        const priceSign = product.type === "credit" ? "+" : "";
+        const time = new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+
+        item.innerHTML = `
+                <div class="tx-info">
+                    <div class="tx-name">${product.name}</div>
+                    <span class="tx-meta">${time} . ${
+          product.stickerText
+        }</span>
+                </div>
+                <div class="tx-price">${priceSign}${product.price.toFixed(
+          2
+        )}</div>
+                <div class="btn-delete">X</div>
+            `;
+        const itemData = {
+          name: product.name,
+          price: product.price,
+          type: product.type,
+        };
+        currentCartItems.push(itemData);
+
+        item.querySelector(".btn-delete").onclick = function () {
+          item.remove();
+          updateBalance(-product.price);
+          const index = currentCartItems.indexOf(itemData);
+          if (index > -1) currentCartItems.splice(index, 1);
+          if (cartEl.children.length === 0) {
+            cartEl.innerHTML =
+              '<div id="empty-msg" style="text-align:center; color:#000; margin-top:50px; font-size:12px; font-weight:bold;">[ RECEIPT EMPTY ]<br>...WAITING FOR INPUT...</div>';
+          }
+        };
+        cartEl.insertBefore(item, cartEl.firstChild);
+        updateBalance(product.price);
+      }
+
+      function updateBalance(amount) {
+        currentBalance += amount;
+        balanceEl.innerText = currentBalance.toFixed(2);
+      }
+
+      function checkoutAndGenerate() {
+        if (currentCartItems.length === 0) {
+          alert("Ticket empty!");
+          return;
+        }
+        createPosterReceipt(currentCartItems, currentBalance);
+        currentCartItems = [];
+        cartEl.innerHTML =
+          '<div id="empty-msg" style="text-align:center; color:#000; margin-top:50px; font-size:12px; font-weight:bold;">[ RECEIPT EMPTY ]<br>...WAITING FOR INPUT...</div>';
+        document.body.classList.add("show-poster");
+      }
+
+      function createPosterReceipt(items, finalBalance) {
+        const receipt = document.createElement("div");
+        receipt.className = "scattered-receipt";
+
+        let itemsHtml = "";
+        let totalLoad = 0;
+        items.forEach((item) => {
+          itemsHtml += `
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px; border-bottom:1px dotted #000;">
+                <span>${item.name}</span>
+                <span>${item.price.toFixed(2)}</span>
+            </div>`;
+          totalLoad += item.price;
+        });
+
+        const randomId = Math.floor(Math.random() * 9000) + 1000;
+
+        receipt.innerHTML = `
+        <div style="text-align:center; border-bottom:2px dashed #000; padding-bottom:5px; margin-bottom:10px;font-size: 14px;">
+            <strong style="font-size: 16px;">CARE MART</strong><br> 
+            <span style="font-size: 12px;">No. ${randomId}</span>
+        </div>
+        <div style="margin-bottom:10px;">${itemsHtml}</div>
+        <div style="text-align:right; font-weight:bold; border-top:2px dashed #000; padding-top:5px;">
+            TOTAL LOAD: ${totalLoad.toFixed(2)} AU <br>
+            BALANCE: ${finalBalance.toFixed(2)} AU
+        </div>
+        <div style="text-align:center; font-size:8px; margin-top:15px; color:#000; line-height: 1.5; font-weight: bold;">
+            *** DISCLAIMER ***<br>
+            ANY PHYSICAL BURDENS PURCHASED<br>
+            TODAY ARE NON-REFUNDABLE.<br>
+            <br>
+            EMOTIONAL FLUCTUATIONS WILL<br>
+            AUTOMATICALLY SETTLE WITHIN 24 HOURS.<br>
+            <br>
+        </div>
+    `;
+        const randomTop = Math.random() * 60 + 20;
+        const randomLeft = Math.random() * 60 + 20;
+
+        receipt.style.top = randomTop + "%";
+        receipt.style.left = randomLeft + "%";
+        receipt.style.transform = `translate(-50%, -50%) rotate(${
+          Math.random() * 60 - 30
+        }deg)`;
+        receiptContainer.appendChild(receipt);
+      }
+
+      function continueShopping() {
+        document.body.classList.remove("show-poster");
+      }
+
+      window.onload = function () {
+        addRandomProduct();
+        addRandomProduct();
+      };
+
+      // === 切换视图 (Grid / Chaos) ===
+      function toggleView() {
+        posterLayer.classList.toggle("grid-mode");
+        const btn = document.getElementById("btn-toggle-view");
+        if (posterLayer.classList.contains("grid-mode")) {
+          btn.innerText = "Switch to Chaos View";
+        } else {
+          btn.innerText = "Switch to Grid View";
+        }
+      }
+
+      // === 核心逻辑：智能高清导出 (Unified High-Res Export) ===
+      // 无论哪个视图，都输出 10.5 x 16.5 inch @ 300 DPI
+      window.exportHighResPDF = async function () {
+        const { jsPDF } = window.jspdf;
+
+        const receipts = document.querySelectorAll(".scattered-receipt");
+        if (receipts.length === 0) {
+          alert("No receipts found!");
+          return;
+        }
+
+        const isGridMode = posterLayer.classList.contains("grid-mode");
+
+        // 1. 创建临时容器
+        // 为了计算方便，我们设定逻辑宽度 1050px (对应 10.5 inch * 100)
+        // 最终通过 html2canvas scale: 3 放大到 3150px (对应 10.5 inch * 300 DPI)
+        const staging = document.createElement("div");
+        document.body.appendChild(staging);
+
+        // 2. 统一的基础样式 (灰色背景 + 网点)
+        staging.style.position = "fixed";
+        staging.style.left = "-10000px";
+        staging.style.top = "0";
+        staging.style.width = "1050px";
+        staging.style.minHeight = "1650px"; // 16.5 inch 比例
+        staging.style.backgroundColor = "#e0e0e0"; // 统一灰色
+        staging.style.backgroundImage =
+          "radial-gradient(#ccc 1px, transparent 1px)"; // 统一网点
+        staging.style.backgroundSize = "20px 20px";
+        staging.style.boxSizing = "border-box";
+
+        // 3. 添加标题 (不论是哪个模式，标题都要进去)
+        const titleDiv = document.createElement("div");
+        titleDiv.innerHTML = "UNSEEN<br>COSTS";
+        titleDiv.style.fontFamily = '"Gotham", sans-serif';
+        titleDiv.style.fontWeight = "900";
+        titleDiv.style.color = "#111";
+        titleDiv.style.textTransform = "uppercase";
+        titleDiv.style.textAlign = "center";
+        titleDiv.style.position = "absolute";
+
+        if (isGridMode) {
+          // Grid 模式：标题在顶部
+          titleDiv.style.fontSize = "40px"; // 对应 Grid 模式下的视觉比例
+          titleDiv.style.top = "50px";
+          titleDiv.style.width = "100%";
+          titleDiv.style.left = "0";
+          titleDiv.style.textAlign = "center";
+        } else {
+          // Chaos 模式：标题在中间
+          titleDiv.style.fontSize = "80px";
+          titleDiv.style.top = "50%";
+          titleDiv.style.left = "50%";
+          titleDiv.style.transform = "translate(-50%, -50%)";
+        }
+        titleDiv.style.zIndex = "9999";
+        staging.appendChild(titleDiv);
+
+        // 4. 根据模式设置容器布局
+        const contentContainer = document.createElement("div");
+        contentContainer.style.width = "100%";
+        contentContainer.style.height = "100%";
+
+        if (isGridMode) {
+          // Grid 布局
+          staging.style.padding = "50px";
+          contentContainer.style.marginTop = "100px";
+          contentContainer.style.display = "grid";
+          contentContainer.style.gridTemplateColumns =
+            "repeat(auto-fill, minmax(260px, 1fr))";
+          contentContainer.style.gap = "50px";
+          contentContainer.style.alignContent = "start";
+        } else {
+          // Chaos 布局 (Absolute)
+          // 不需要 padding，因为是绝对定位
+          contentContainer.style.position = "absolute";
+          contentContainer.style.top = "0";
+          contentContainer.style.left = "0";
+        }
+        staging.appendChild(contentContainer);
+
+        // 5. 克隆并放置小票
+        receipts.forEach((orig) => {
+          const clone = orig.cloneNode(true);
+
+          if (isGridMode) {
+            // 清洗样式为 Grid
+            clone.style.position = "relative";
+            clone.style.transform = "none";
+            clone.style.top = "auto";
+            clone.style.left = "auto";
+            clone.style.margin = "0";
+            clone.style.width = "90%";
+            clone.style.boxShadow = "0 2px 5px rgba(0,0,0,0.1)";
+          } else {
+            // 保持样式为 Chaos
+            // 关键：保留原来的 top/left 百分比，这样在 10.5x16.5 的画布上位置相对不变
+            clone.style.position = "absolute";
+            // 保持原有的 transform (旋转)
+            // 保持原有的 top/left (百分比)
+            // 保持宽度 (200px 在 1050px 宽的画布上大概占 1/5，符合视觉比例)
+          }
+          contentContainer.appendChild(clone);
+        });
+
+        // 6. 生成截图
+        try {
+          const canvas = await html2canvas(staging, {
+            scale: 3, // 300 DPI 核心设置
+            useCORS: true,
+            backgroundColor: "#e0e0e0", // 确保背景色
+          });
+
+          const imgData = canvas.toDataURL("image/jpeg", 0.9);
+
+          // 7. 生成 PDF
+          const pdf = new jsPDF({
+            orientation: "p",
+            unit: "in",
+            format: [10.5, 16.5],
+          });
+
+          // 计算图片在 PDF 中的尺寸
+          const imgProps = pdf.getImageProperties(imgData);
+          const pdfHeight = (imgProps.height * 10.5) / imgProps.width;
+
+          pdf.addImage(imgData, "JPEG", 0, 0, 10.5, pdfHeight);
+
+          const filename = isGridMode
+            ? "CareMart_Poster_Grid_300DPI.pdf"
+            : "CareMart_Poster_Chaos_300DPI.pdf";
+          pdf.save(filename);
+        } catch (err) {
+          console.error("Export Failed:", err);
+          alert("Export failed, check console.");
+        } finally {
+          // 清理
+          document.body.removeChild(staging);
+        }
+      };
+    </script>
+  </body>
+</html>

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Body Mart: Unseen Costs</title>
+    <style>
+        /* --- 1. 全局设置 --- */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f4f4f4;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* --- 2. 海报层 (Poster Layer) - 底层 --- */
+        #poster-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #e0e0e0; /* 桌布/海报背景色 */
+            background-image: radial-gradient(#ccc 1px, transparent 1px);
+            background-size: 20px 20px; /* 点阵纹理 */
+            z-index: 1;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 中心文字 "UNSEEN COSTS" */
+        .center-title {
+            font-family: 'Gotham'; /* 或者换成手写字体 */
+            font-weight: 900;
+            font-size: 80px;
+            color: #111;
+            text-transform: uppercase;
+            z-index: 1000; /* 确保文字浮在最上面 */
+            text-align: center;
+            letter-spacing: -2px;
+            /* background: #e0e0e0; 给文字加背景，防止小票太乱看不清 */
+            padding: 20px 40px;
+            /* border: 4px solid #111; */
+            /* box-shadow: 10px 10px 0px rgba(0,0,0,0.2); */
+            /* transform: rotate(-2deg); */
+            pointer-events: none; /* 让鼠标可以穿透文字点到后面的小票 */
+        }
+
+        /* 生成的散落小票样式 */
+        .scattered-receipt {
+            position: absolute;
+            width: 200px;
+            background: #fff;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            z-index: 10;
+            transition: transform 0.3s;
+            cursor: move; /* 暗示可以拖动(虽然没写拖动功能，但增加互动感) */
+            /* 锯齿边缘 */
+            clip-path: polygon(
+                0% 0%, 100% 0%, 100% 100%, 
+                95% 99%, 90% 100%, 85% 99%, 80% 100%, 75% 99%, 70% 100%, 65% 99%, 60% 100%, 
+                55% 99%, 50% 100%, 45% 99%, 40% 100%, 35% 99%, 30% 100%, 25% 99%, 20% 100%, 
+                15% 99%, 10% 100%, 5% 99%, 0% 100%
+            );
+        }
+        .scattered-receipt:hover { z-index: 999; transform: scale(1.1) !important; }
+        
+        /* 海报页的操作按钮 */
+        .poster-controls {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            z-index: 2000;
+        }
+        .btn-back {
+            padding: 15px 30px;
+            background: #111;
+            color: #fff;
+            border: none;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.4);
+        }
+        .btn-back:hover { background: #333; }
+
+        /* --- 3. 购物层 (Shop Layer) - 顶层覆盖 --- */
+        #shop-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #f4f4f4;
+            z-index: 5000; /* 默认盖住海报 */
+            display: flex;
+            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1); /* 滑动动画 */
+        }
+
+        /* 当我们要展示海报时，把购物层移开 */
+        body.show-poster #shop-layer {
+            transform: translateY(-100%); /* 向上滑走 */
+        }
+
+        /* --- 以下是之前的 Market/Wallet 样式 (保持不变) --- */
+        .market-area {
+            flex: 1; padding: 40px; overflow-y: auto;
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 30px; align-content: start;
+        }
+        .product-card {
+            background: #fff; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            overflow: hidden; position: relative; transition: all 0.2s ease; cursor: pointer;
+            animation: popIn 0.4s ease backwards;
+        }
+        .product-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.15); z-index: 10; }
+        .product-image {
+            height: 180px; background-color: #eee; display: flex; align-items: center; justify-content: center;
+            color: #aaa; font-weight: bold; font-size: 14px; position: relative; overflow: hidden;
+        }
+        .product-info { padding: 15px; }
+        .p-name { font-weight: bold; font-size: 16px; margin-bottom: 5px; color: #333; }
+        .p-desc { font-size: 11px; color: #777; margin-bottom: 10px; line-height: 1.4; min-height: 30px;}
+        .p-price { font-weight: bold; font-family: 'Courier New', monospace; font-size: 14px; }
+        .price-pos { color: #2ecc71; } 
+        .price-neg { color: #e74c3c; } 
+        .sticker-overlay { position: absolute; pointer-events: none; z-index: 20; font-family: 'Courier New', monospace; box-shadow: 2px 2px 5px rgba(0,0,0,0.2); }
+        .s-warning { background: #ff3333; color: white; border: 2px solid white; padding: 4px 8px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
+        .s-label { background: #ffd700; border: 1px solid #000; padding: 4px; font-size: 10px; width: 70px; text-align: center; }
+        .s-round { width: 40px; height: 40px; background: #333; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; text-align: center; line-height: 1; border: 2px solid #fff; }
+        
+        .fab-add {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: #000; color: #fff; border: none; padding: 12px 25px;
+            border-radius: 30px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3); z-index: 100;
+        }
+
+        .wallet-area {
+            width: 360px; background: #fff; border-left: 1px solid #ddd;
+            display: flex; flex-direction: column; box-shadow: -5px 0 20px rgba(0,0,0,0.05); position: relative;
+        }
+        .wallet-header { padding: 30px 20px; background: #f9f9f9; border-bottom: 1px dashed #ccc; text-align: center; }
+        .balance-amount { font-size: 42px; font-weight: bold; margin-top: 5px; font-family: 'Courier New', monospace; color: #333; }
+        .transaction-list { flex: 1; padding: 10px 20px; overflow-y: auto; font-family: 'Courier New', monospace; }
+        .tx-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dotted #eee; font-size: 12px; animation: slideIn 0.3s ease; }
+        .tx-info { flex: 1; }
+        .tx-name { font-weight: bold; margin-bottom: 2px; }
+        .tx-meta { font-size: 9px; color: #aaa; }
+        .tx-price { font-weight: bold; margin: 0 10px; }
+        .btn-delete { color: #ccc; cursor: pointer; font-size: 16px; padding: 0 5px; }
+        .btn-delete:hover { color: #ff3333; }
+
+        .wallet-footer { padding: 20px; background: #fff; border-top: 1px solid #eee; text-align: center; }
+        .btn-checkout {
+            width: 100%; padding: 15px; background: #000; color: #fff; border: none;
+            font-weight: bold; cursor: pointer; font-family: 'Courier New', monospace;
+            text-transform: uppercase; letter-spacing: 1px;
+            transition: background 0.2s;
+        }
+        .btn-checkout:hover { background: #333; }
+
+        @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+    </style>
+</head>
+<body>
+
+    <div id="poster-layer">
+        <div class="center-title">
+            UNSEEN COSTS
+        </div>
+
+        <div id="receipt-container"></div>
+
+        <div class="poster-controls">
+            <button class="btn-back" onclick="continueShopping()">+ Continue Life (Shop More)</button>
+        </div>
+    </div>
+
+
+    <div id="shop-layer">
+        <div class="market-area" id="shelf">
+            <button class="fab-add" onclick="addRandomProduct()">+ STUMBLE UPON ITEM</button>
+        </div>
+
+        <div class="wallet-area">
+            <div class="wallet-header">
+                <div style="font-size: 10px; color: #888; letter-spacing: 2px;">BODY BALANCE</div>
+                <div class="balance-amount" id="balance">50.00</div>
+                <div style="font-size: 10px; color: #aaa;">AU (Affective Units)</div>
+            </div>
+
+            <div class="transaction-list" id="cart-list">
+                <div id="empty-msg" style="text-align:center; color:#ccc; margin-top:50px; font-size:10px;">
+                    YOUR WALLET IS EMPTY.<br>ADD ITEMS.
+                </div>
+            </div>
+
+            <div class="wallet-footer">
+                <button class="btn-checkout" onclick="checkoutAndGenerate()">CHECKOUT & POSTER</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === 1. 数据配置 ===
+        const inventory = [
+            { name: "Weighted Blanket", desc: "Simulates a hug.", price: 5.50, type: "credit", color: "#e3dac9", photoName: "BLANKET", sticker: { text: "COMFORT", type: "s-label" } },
+            { name: "iPhone Pro", desc: "Daily focus drain.", price: -12.00, type: "debit", color: "#2c3e50", photoName: "PHONE", sticker: { text: "HIGH DRAIN", type: "s-warning" } },
+            { name: "Greasy Burger", desc: "Instant dopamine.", price: -3.20, type: "debit", color: "#f1c40f", photoName: "BURGER", sticker: { text: "GUILT", type: "s-round" } },
+            { name: "Stray Cat", desc: "Healing purr.", price: 8.00, type: "credit", color: "#bdc3c7", photoName: "CAT", sticker: { text: "HEALING", type: "s-label" } },
+            { name: "Social Media", desc: "Time loss.", price: -5.50, type: "debit", color: "#8e44ad", photoName: "APP", sticker: { text: "TOXIC", type: "s-warning" } },
+            { name: "Hot Tea", desc: "Calm moment.", price: 2.50, type: "credit", color: "#27ae60", photoName: "TEA", sticker: { text: "CALM", type: "s-round" } }
+        ];
+
+        let currentBalance = 50.00;
+        // 用来存储当前这一单买了什么
+        let currentCartItems = []; 
+
+        const shelfEl = document.getElementById('shelf');
+        const cartEl = document.getElementById('cart-list');
+        const balanceEl = document.getElementById('balance');
+        const receiptContainer = document.getElementById('receipt-container');
+
+        function random(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+        // === 2. 渲染商品卡片 ===
+        function renderCard(product) {
+            const card = document.createElement('div');
+            card.className = 'product-card';
+            const sTop = random(5, 60); const sLeft = random(5, 60); const sRot = random(-15, 15);
+            const priceClass = product.type === 'credit' ? 'price-pos' : 'price-neg';
+            const priceSign = product.type === 'credit' ? '+' : '';
+            
+            card.innerHTML = `
+                <div class="product-image" style="background-color: ${product.color};">
+                    <span>[${product.photoName}]</span>
+                    <div class="sticker-overlay ${product.sticker.type}" style="top:${sTop}%; left:${sLeft}%; transform:rotate(${sRot}deg);">
+                        ${product.sticker.text}
+                    </div>
+                </div>
+                <div class="product-info">
+                    <div class="p-name">${product.name}</div>
+                    <div class="p-desc">${product.desc}</div>
+                    <div class="p-price ${priceClass}">${priceSign}${product.price.toFixed(2)}</div>
+                </div>
+            `;
+            card.onclick = () => addToCart(product);
+            shelfEl.appendChild(card);
+            shelfEl.scrollTop = shelfEl.scrollHeight;
+        }
+
+        function addRandomProduct() {
+            const randomItem = inventory[Math.floor(Math.random() * inventory.length)];
+            renderCard(randomItem);
+        }
+
+        // === 3. 购物车逻辑 ===
+        function addToCart(product) {
+            if(document.getElementById('empty-msg')) document.getElementById('empty-msg').remove();
+
+            const item = document.createElement('div');
+            item.className = 'tx-item';
+            const priceClass = product.type === 'credit' ? 'price-pos' : 'price-neg';
+            const priceSign = product.type === 'credit' ? '+' : '';
+            const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+            item.innerHTML = `
+                <div class="tx-info">
+                    <div class="tx-name">${product.name}</div>
+                    <span class="tx-meta">${time} • ${product.sticker.text}</span>
+                </div>
+                <div class="tx-price ${priceClass}">${priceSign}${product.price.toFixed(2)}</div>
+                <div class="btn-delete">×</div>
+            `;
+
+            const itemData = { name: product.name, price: product.price, time: time, type: product.type };
+            currentCartItems.push(itemData); // 存入数据数组
+
+            // 删除逻辑
+            item.querySelector('.btn-delete').onclick = function() {
+                item.remove();
+                updateBalance(-product.price);
+                // 从数据数组移除
+                const index = currentCartItems.indexOf(itemData);
+                if (index > -1) currentCartItems.splice(index, 1);
+                
+                if(cartEl.children.length === 0) {
+                    cartEl.innerHTML = '<div id="empty-msg" style="text-align:center; color:#ccc; margin-top:50px; font-size:10px;">YOUR WALLET IS EMPTY.<br>ADD ITEMS.</div>';
+                }
+            };
+
+            cartEl.insertBefore(item, cartEl.firstChild);
+            updateBalance(product.price);
+        }
+
+        function updateBalance(amount) {
+            currentBalance += amount;
+            balanceEl.innerText = currentBalance.toFixed(2);
+            balanceEl.style.color = currentBalance < 20 ? '#e74c3c' : '#333';
+        }
+
+        // === 4. 核心功能：结算并生成海报小票 ===
+        function checkoutAndGenerate() {
+            if(currentCartItems.length === 0) {
+                alert("You haven't bought anything yet!");
+                return;
+            }
+
+            // 1. 生成一张新的小票 DOM
+            createPosterReceipt(currentCartItems, currentBalance);
+
+            // 2. 清空购物车数据 (为下一次做准备)
+            currentCartItems = [];
+            cartEl.innerHTML = '<div id="empty-msg" style="text-align:center; color:#ccc; margin-top:50px; font-size:10px;">YOUR WALLET IS EMPTY.<br>ADD ITEMS.</div>';
+
+            // 3. 切换视图：滑开购物层，露出海报层
+            document.body.classList.add('show-poster');
+        }
+
+        function createPosterReceipt(items, finalBalance) {
+            const receipt = document.createElement('div');
+            receipt.className = 'scattered-receipt';
+            
+            // 构建小票内容的 HTML
+            let itemsHtml = '';
+            let totalLoad = 0;
+            items.forEach(item => {
+                itemsHtml += `
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px; border-bottom:1px dotted #ccc;">
+                        <span>${item.name}</span>
+                        <span>${item.price.toFixed(2)}</span>
+                    </div>
+                `;
+                totalLoad += item.price;
+            });
+
+            const randomId = Math.floor(Math.random() * 9000) + 1000;
+            const date = new Date().toLocaleDateString();
+
+            receipt.innerHTML = `
+                <div style="text-align:center; border-bottom:1px solid #000; padding-bottom:5px; margin-bottom:10px;">
+                    <strong>THE BODY MART</strong><br>
+                    No. ${randomId} &nbsp; ${date}
+                </div>
+                <div style="margin-bottom:10px;">
+                    ${itemsHtml}
+                </div>
+                <div style="text-align:right; font-weight:bold; border-top:2px solid #000; padding-top:5px;">
+                    TOTAL: ${totalLoad.toFixed(2)} AU
+                </div>
+                <div style="text-align:center; font-size:8px; margin-top:10px; color:#555;">
+                    BALANCE REMAINING: ${finalBalance.toFixed(2)}<br>
+                    NON-REFUNDABLE LIFE.
+                </div>
+                <div style="height:20px; background:repeating-linear-gradient(to right,#000,#000 2px,#fff 2px,#fff 4px); margin-top:10px;"></div>
+            `;
+
+            // === 随机位置算法 (模拟散落) ===
+            // 为了不完全遮挡中间的字，我们尽量让它分布在四周，或者完全随机但允许遮挡
+            // 这里使用完全随机 + 旋转，制造“乱”的感觉
+            
+            const randomTop = Math.random() * 70 + 10; // 10% 到 80% 之间
+            const randomLeft = Math.random() * 80 + 5; // 5% 到 85% 之间
+            const randomRotate = Math.random() * 90 - 45; // -45度 到 45度
+
+            receipt.style.top = randomTop + '%';
+            receipt.style.left = randomLeft + '%';
+            receipt.style.transform = `rotate(${randomRotate}deg)`;
+
+            receiptContainer.appendChild(receipt);
+        }
+
+        // === 5. 回到购物界面 ===
+        function continueShopping() {
+            // 移除 class，购物层滑回来
+            document.body.classList.remove('show-poster');
+        }
+
+        // 初始化
+        window.onload = function() {
+            addRandomProduct();
+            addRandomProduct();
+        };
+
+    </script>
+</body>
+</html>

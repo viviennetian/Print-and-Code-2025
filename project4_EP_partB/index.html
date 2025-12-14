@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Body Wallet Collection</title>
+    <style>
+        /* 全局背景：深色底，突出纸张质感 */
+        body {
+            background-color: #1a1a1a;
+            color: #333;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 40px;
+            overflow-x: hidden;
+        }
+
+        /* 网格容器：Masonry 风格 */
+        #collection-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 30px;
+            align-items: start; /* 让高度不一的元素顶部对齐 */
+        }
+
+        /* 基础纸片样式 */
+        .paper-item {
+            background: #fff;
+            position: relative;
+            box-shadow: 2px 4px 15px rgba(0,0,0,0.3);
+            transition: transform 0.3s ease;
+            cursor: pointer;
+            overflow: hidden;
+            animation: popIn 0.5s ease backwards;
+        }
+
+        .paper-item:hover {
+            transform: scale(1.05) rotate(0deg) !important; /* 悬停时摆正并放大 */
+            z-index: 10;
+            box-shadow: 5px 10px 25px rgba(0,0,0,0.4);
+        }
+
+        /* ================= 类型 1: 购物小票 (Receipt) ================= */
+        .type-receipt {
+            background: #fff;
+            padding: 15px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            min-height: 250px;
+            clip-path: polygon(
+                0% 0%, 100% 0%, 100% 100%, 
+                95% 98%, 90% 100%, 85% 98%, 80% 100%, 75% 98%, 70% 100%, 65% 98%, 60% 100%, 
+                55% 98%, 50% 100%, 45% 98%, 40% 100%, 35% 98%, 30% 100%, 25% 98%, 20% 100%, 
+                15% 98%, 10% 100%, 5% 98%, 0% 100%
+            ); /* 底部锯齿 */
+        }
+        .receipt-header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
+        .receipt-total { border-top: 1px dashed #000; margin-top: 10px; padding-top: 5px; font-weight: bold; text-align: right;}
+
+        /* ================= 类型 2: 吊牌 (Tag) ================= */
+        .type-tag {
+            background: #e6dfcc; /* 牛皮纸色 */
+            padding: 20px;
+            min-height: 180px;
+            border-radius: 4px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        /* 吊牌孔 */
+        .type-tag::before {
+            content: '';
+            position: absolute;
+            top: 10px; left: 50%; transform: translateX(-50%);
+            width: 12px; height: 12px;
+            background: #1a1a1a;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.5);
+        }
+        .tag-brand { font-weight: 900; font-size: 24px; letter-spacing: -1px; margin-top: 15px; }
+        .tag-size { font-size: 32px; font-weight: bold; opacity: 0.6; }
+
+        /* ================= 类型 3: 警示贴纸 (Warning Label) ================= */
+        .type-label {
+            background: #fff;
+            border: 6px solid #ff3333; /* 红色边框 */
+            padding: 10px;
+            font-family: Arial, sans-serif;
+            text-transform: uppercase;
+        }
+        .label-header {
+            background: #ff3333;
+            color: #fff;
+            font-weight: bold;
+            text-align: center;
+            padding: 2px;
+            font-size: 14px;
+        }
+        .label-text { font-size: 11px; margin-top: 10px; font-weight: bold; line-height: 1.2; }
+
+        /* ================= 类型 4: 干洗券/入场券 (Ticket) ================= */
+        .type-ticket {
+            background: #ffccdd; /* 粉色单据 */
+            padding: 15px;
+            border-left: 2px dashed rgba(0,0,0,0.2); /* 侧边撕裂线 */
+            font-family: 'Courier New', monospace;
+        }
+        .ticket-no { font-size: 28px; color: #d63384; font-weight: bold; transform: rotate(-5deg); border: 2px solid #d63384; display: inline-block; padding: 2px 5px; border-radius: 4px;}
+
+        /* 底部控制栏 */
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #fff;
+            padding: 10px 20px;
+            border-radius: 50px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+            z-index: 100;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #000;
+            color: #fff;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover { background: #333; }
+
+        @keyframes popIn {
+            from { opacity: 0; transform: scale(0.5) translateY(50px); }
+            to { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="collection-grid">
+        </div>
+
+    <div class="controls">
+        <button onclick="generateChaos()">🔄 REFRESH WALLET</button>
+        <button onclick="addOne()">+ ADD ONE</button>
+    </div>
+
+    <script>
+        // === 数据源：这里定义你的“情绪商品” ===
+        const brands = ["HUMAN-MACHINE", "MOMA", "7-ELEVEN", "UNIQLO", "NYU EATS", "TRADER JOE'S"];
+        const emotions = ["Social Anxiety", "Cheap Dopamine", "Existential Crisis", "Validation", "Fatigue", "Joy (30% OFF)", "Regret"];
+        const warnings = ["DO NOT REMOVE", "FRAGILE EGO", "HEAVY LOAD", "TOXIC CONTENT", "HAND WASH ONLY"];
+        const sizes = ["XS", "M", "XL", "XXL", "VOID"];
+        
+        const container = document.getElementById('collection-grid');
+
+        // 生成随机数
+        function random(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+        function pick(array) {
+            return array[Math.floor(Math.random() * array.length)];
+        }
+
+        // === 核心生成逻辑 ===
+        function createItem() {
+            const types = ['receipt', 'tag', 'label', 'ticket'];
+            const type = pick(types);
+            const item = document.createElement('div');
+            
+            // 随机旋转角度 (-3度 到 3度)，模拟自然散落
+            const rotation = random(-3, 3);
+            item.className = `paper-item type-${type}`;
+            item.style.transform = `rotate(${rotation}deg)`;
+
+            // 根据类型填充不同的 HTML 内容
+            if (type === 'receipt') {
+                item.innerHTML = `
+                    <div class="receipt-header">
+                        ${pick(brands)}<br>
+                        ${random(10,23)}:${random(10,59)} PM
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <div>${pick(emotions)} ... $${random(1, 10)}.99</div>
+                        <div>${pick(emotions)} ... $${random(0, 5)}.50</div>
+                    </div>
+                    <div class="receipt-total">TOTAL: ${random(10, 50)} AU-</div>
+                `;
+            } else if (type === 'tag') {
+                item.innerHTML = `
+                    <div style="font-size:10px; opacity:0.5;">MADE IN ANXIETY</div>
+                    <div class="tag-brand">${pick(brands)}</div>
+                    <div style="margin: 20px 0; border-top:1px solid #999; border-bottom:1px solid #999; padding:5px 0;">
+                        STYLE: ${pick(emotions).toUpperCase()}
+                    </div>
+                    <div class="tag-size">${pick(sizes)}</div>
+                `;
+            } else if (type === 'label') {
+                item.innerHTML = `
+                    <div class="label-header">WARNING</div>
+                    <div class="label-text">
+                        ${pick(warnings)}<br><br>
+                        UNDER PENALTY OF LAW:<br>
+                        THIS MOOD CONTAINS 100% ARTIFICIAL STRESS.
+                    </div>
+                `;
+            } else if (type === 'ticket') {
+                item.innerHTML = `
+                    <div style="font-size:10px;">CLAIM CHECK</div>
+                    <div style="margin:10px 0;">Item: ${pick(emotions)}</div>
+                    <div class="ticket-no">No. 00${random(100,999)}</div>
+                    <div style="font-size:9px; margin-top:10px; color:#d63384;">Not responsible for emotional damage.</div>
+                `;
+            }
+
+            container.appendChild(item);
+        }
+
+        // 初始化：生成 10 个碎片
+        function generateChaos() {
+            container.innerHTML = '';
+            for(let i=0; i<12; i++) {
+                createItem();
+            }
+        }
+        
+        function addOne() {
+            createItem();
+        }
+
+        // 页面加载时运行
+        generateChaos();
+
+    </script>
+</body>
+</html>

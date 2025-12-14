@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Body Mart - Interactive Wallet</title>
+    <style>
+        /* --- 基础设置 --- */
+        body {
+            background-color: #f4f4f4;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        /* --- 左侧：商品货架 (Market) --- */
+        .market-area {
+            flex: 1;
+            padding: 40px;
+            overflow-y: auto; /* 允许垂直滚动 */
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 30px;
+            align-content: start;
+            position: relative;
+        }
+
+        /* 卡片样式 */
+        .product-card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            overflow: hidden;
+            position: relative;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            animation: popIn 0.4s ease backwards;
+        }
+        .product-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            z-index: 10;
+        }
+        .product-card:active { transform: scale(0.98); }
+
+        /* 图片占位符 */
+        .product-image {
+            height: 180px;
+            background-color: #eee;
+            display: flex; align-items: center; justify-content: center;
+            color: #aaa; font-weight: bold; font-size: 14px;
+            position: relative;
+            overflow: hidden;
+        }
+        .product-image img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* 信息区 */
+        .product-info { padding: 15px; }
+        .p-name { font-weight: bold; font-size: 16px; margin-bottom: 5px; color: #333; }
+        .p-desc { font-size: 11px; color: #777; margin-bottom: 10px; line-height: 1.4; min-height: 30px;}
+        .p-price { font-weight: bold; font-family: 'Courier New', monospace; font-size: 14px; }
+        
+        .price-pos { color: #2ecc71; } /* Credit (+AU) */
+        .price-neg { color: #e74c3c; } /* Debit (-AU) */
+
+        /* 贴纸样式 */
+        .sticker-overlay {
+            position: absolute; pointer-events: none; z-index: 20;
+            font-family: 'Courier New', monospace; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+        }
+        .s-warning { background: #ff3333; color: white; border: 2px solid white; padding: 4px 8px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
+        .s-label { background: #ffd700; border: 1px solid #000; padding: 4px; font-size: 10px; width: 70px; text-align: center; }
+        .s-round { width: 40px; height: 40px; background: #333; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; text-align: center; line-height: 1; border: 2px solid #fff; }
+
+        /* 左侧浮动按钮 (随机添加) */
+        .fab-add {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: #000; color: #fff; border: none; padding: 12px 25px;
+            border-radius: 30px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3); z-index: 100;
+            transition: transform 0.2s;
+        }
+        .fab-add:hover { transform: translateX(-50%) scale(1.05); background: #333; }
+
+        /* --- 右侧：钱包/小票 (Wallet) --- */
+        .wallet-area {
+            width: 360px;
+            background: #fff;
+            border-left: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            box-shadow: -5px 0 20px rgba(0,0,0,0.05);
+            position: relative;
+        }
+        
+        .wallet-header {
+            padding: 30px 20px;
+            background: #f9f9f9;
+            border-bottom: 1px dashed #ccc;
+            text-align: center;
+        }
+        .balance-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 2px; }
+        .balance-amount { font-size: 42px; font-weight: bold; margin-top: 5px; font-family: 'Courier New', monospace; color: #333; }
+
+        /* 滚动列表 */
+        .transaction-list {
+            flex: 1;
+            padding: 10px 20px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* 列表项 */
+        .tx-item {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 10px; padding-bottom: 10px;
+            border-bottom: 1px dotted #eee;
+            font-size: 12px;
+            animation: slideIn 0.3s ease;
+        }
+        .tx-info { flex: 1; }
+        .tx-name { font-weight: bold; margin-bottom: 2px; }
+        .tx-meta { font-size: 9px; color: #aaa; }
+        .tx-price { font-weight: bold; margin: 0 10px; }
+        
+        /* 删除按钮 */
+        .btn-delete {
+            color: #ccc; cursor: pointer; font-size: 16px; padding: 0 5px;
+            transition: color 0.2s;
+        }
+        .btn-delete:hover { color: #ff3333; }
+
+        /* 底部操作栏 */
+        .wallet-footer {
+            padding: 20px;
+            background: #fff;
+            border-top: 1px solid #eee;
+            text-align: center;
+        }
+        .btn-print {
+            width: 100%; padding: 12px;
+            background: #fff; border: 2px solid #000;
+            font-weight: bold; cursor: pointer;
+            font-family: 'Courier New', monospace;
+            text-transform: uppercase;
+            transition: all 0.2s;
+        }
+        .btn-print:hover { background: #000; color: #fff; }
+
+        /* 动画 */
+        @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+        /* --- 打印模式 (只打印右边) --- */
+        @media print {
+            body { background: #fff; height: auto; overflow: visible; display: block; }
+            .market-area { display: none; } /* 隐藏左边 */
+            .fab-add { display: none; }
+            .wallet-area {
+                width: 100%; box-shadow: none; border: none; position: static;
+                font-size: 12px;
+            }
+            .wallet-footer { display: none; } /* 隐藏打印按钮本身 */
+            .btn-delete { display: none; } /* 打印时不显示删除叉号 */
+            .transaction-list { overflow: visible; height: auto; } /* 展开所有列表 */
+            
+            /* 模拟真实小票的黑白效果 */
+            .tx-price { color: #000 !important; }
+            .balance-amount { color: #000 !important; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="market-area" id="shelf">
+        <button class="fab-add" onclick="addRandomProduct()">+ STUMBLE UPON ITEM</button>
+    </div>
+
+    <div class="wallet-area">
+        <div class="wallet-header">
+            <div class="balance-label">Current Body Balance</div>
+            <div class="balance-amount" id="balance">50.00</div>
+            <div style="font-size: 10px; color: #aaa; margin-top: 5px;">AU (Affective Units)</div>
+        </div>
+
+        <div class="transaction-list" id="cart-list">
+            <div style="text-align:center; color:#ccc; margin-top:50px; font-size:10px;">
+                YOUR WALLET IS EMPTY.<br>GO SHOPPING.
+            </div>
+        </div>
+
+        <div class="wallet-footer">
+            <button class="btn-print" onclick="window.print()">🖨 Print Receipt</button>
+        </div>
+    </div>
+
+    <script>
+        // === 1. 商品数据库 (在这里配置所有可能的商品) ===
+        const inventory = [
+            {
+                name: "Weighted Blanket",
+                desc: "Simulates a hug. Increases serotonin levels.",
+                price: 5.50,
+                type: "credit", // 增加能量
+                color: "#e3dac9", // 图片背景色
+                photoName: "BLANKET", // 占位文字
+                sticker: { text: "COMFORT", type: "s-label" }
+            },
+            {
+                name: "iPhone Pro",
+                desc: "Blue light subscription. Drains focus daily.",
+                price: -12.00,
+                type: "debit", // 消耗能量
+                color: "#2c3e50",
+                photoName: "PHONE",
+                sticker: { text: "HIGH DRAIN", type: "s-warning" }
+            },
+            {
+                name: "Greasy Burger",
+                desc: "Instant dopamine spike, followed by regret.",
+                price: -3.20,
+                type: "debit",
+                color: "#f1c40f",
+                photoName: "BURGER",
+                sticker: { text: "GUILT", type: "s-round" }
+            },
+            {
+                name: "Stray Cat",
+                desc: "Purring frequency heals emotional damage.",
+                price: 8.00,
+                type: "credit",
+                color: "#bdc3c7",
+                photoName: "CAT",
+                sticker: { text: "HEALING", type: "s-label" }
+            },
+            {
+                name: "Social Media",
+                desc: "Infinite scroll loop. Loss of time perception.",
+                price: -5.50,
+                type: "debit",
+                color: "#8e44ad",
+                photoName: "APP ICON",
+                sticker: { text: "TOXIC", type: "s-warning" }
+            },
+            {
+                name: "Hot Tea",
+                desc: "Temporary pause in chaotic spacetime.",
+                price: 2.50,
+                type: "credit",
+                color: "#27ae60",
+                photoName: "TEA",
+                sticker: { text: "CALM", type: "s-round" }
+            }
+        ];
+
+        // === 2. 状态管理 ===
+        let currentBalance = 50.00;
+        const shelfEl = document.getElementById('shelf');
+        const cartEl = document.getElementById('cart-list');
+        const balanceEl = document.getElementById('balance');
+
+        // 工具：生成随机数
+        function random(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+        // === 3. 生成商品卡片 (渲染到左侧) ===
+        function renderCard(product) {
+            const card = document.createElement('div');
+            card.className = 'product-card';
+            
+            // 贴纸随机位置
+            const sTop = random(5, 60);
+            const sLeft = random(5, 60);
+            const sRot = random(-15, 15);
+
+            // 价格显示格式
+            const priceClass = product.type === 'credit' ? 'price-pos' : 'price-neg';
+            const priceSign = product.type === 'credit' ? '+' : '';
+            const priceDisplay = `${priceSign}${product.price.toFixed(2)} AU`;
+
+            card.innerHTML = `
+                <div class="product-image" style="background-color: ${product.color};">
+                    <span>[${product.photoName}]</span>
+                    
+                    <div class="sticker-overlay ${product.sticker.type}" 
+                         style="top:${sTop}%; left:${sLeft}%; transform:rotate(${sRot}deg);">
+                        ${product.sticker.text}
+                    </div>
+                </div>
+                <div class="product-info">
+                    <div class="p-name">${product.name}</div>
+                    <div class="p-desc">${product.desc}</div>
+                    <div class="p-price ${priceClass}">${priceDisplay}</div>
+                </div>
+            `;
+
+            // 点击事件：添加到购物车
+            card.onclick = () => addToCart(product);
+
+            // 将卡片插入到按钮之前
+            // shelfEl.insertBefore(card, shelfEl.lastElementChild); 
+            // 如果想每次加在最后（按钮下面是不行的，因为Grid），直接 append 即可。
+            // 为了不挡住悬浮按钮，最好是 append。
+            shelfEl.appendChild(card);
+            
+            // 自动滚动到底部
+            shelfEl.scrollTop = shelfEl.scrollHeight;
+        }
+
+        // === 4. 随机添加功能 (点击按钮触发) ===
+        function addRandomProduct() {
+            // 从数据库随机选一个
+            const randomItem = inventory[Math.floor(Math.random() * inventory.length)];
+            renderCard(randomItem);
+        }
+
+        // === 5. 购物车逻辑 (添加到右侧) ===
+        function addToCart(product) {
+            // 清除“空钱包”提示
+            if(cartEl.innerText.includes('EMPTY')) cartEl.innerHTML = '';
+
+            const item = document.createElement('div');
+            item.className = 'tx-item';
+
+            const priceClass = product.type === 'credit' ? 'price-pos' : 'price-neg';
+            const priceSign = product.type === 'credit' ? '+' : '';
+            
+            // 当前时间
+            const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+            item.innerHTML = `
+                <div class="tx-info">
+                    <div class="tx-name">${product.name}</div>
+                    <span class="tx-meta">${time} • ${product.sticker.text}</span>
+                </div>
+                <div class="tx-price ${priceClass}">${priceSign}${product.price.toFixed(2)}</div>
+                <div class="btn-delete" title="Remove Item">×</div>
+            `;
+
+            // 绑定删除事件
+            const deleteBtn = item.querySelector('.btn-delete');
+            deleteBtn.onclick = function() {
+                removeFromCart(item, product.price);
+            };
+
+            // 插入到列表顶部
+            cartEl.insertBefore(item, cartEl.firstChild);
+
+            // 更新余额
+            updateBalance(product.price);
+        }
+
+        // === 6. 撤销/删除逻辑 ===
+        function removeFromCart(element, price) {
+            // 动画移除
+            element.style.opacity = '0';
+            setTimeout(() => {
+                element.remove();
+                // 检查是否空了
+                if(cartEl.children.length === 0) {
+                    cartEl.innerHTML = '<div style="text-align:center; color:#ccc; margin-top:50px; font-size:10px;">YOUR WALLET IS EMPTY.<br>GO SHOPPING.</div>';
+                }
+            }, 300);
+
+            // 余额回滚 (减去刚才加的，或者加上刚才减的)
+            // 注意：这里是 "反向操作"，所以用 负号
+            updateBalance(-price);
+        }
+
+        // === 7. 更新余额 ===
+        function updateBalance(amount) {
+            currentBalance += amount;
+            balanceEl.innerText = currentBalance.toFixed(2);
+            
+            // 颜色反馈
+            if(currentBalance < 20) {
+                balanceEl.style.color = '#e74c3c'; // 红色警告
+            } else {
+                balanceEl.style.color = '#333';
+            }
+        }
+
+        // === 初始化：先生成几个商品 ===
+        window.onload = function() {
+            addRandomProduct();
+            addRandomProduct();
+            addRandomProduct();
+        };
+
+    </script>
+</body>
+</html>
